@@ -2,6 +2,10 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
+LAPLACIAN_KERNEL = np.array([[0, 1, 0],
+                             [1, -4, 1],
+                             [0, 1, 0]])
+
 
 def calc_img_grad(img):
     img_x = np.roll(img, -1, axis=1) - img
@@ -22,8 +26,9 @@ def shrink(x, gamma):
 
 
 def load_image(image_name, show_flag=True):
-    if image_name == 'Lena' or image_name == 'Shapes':
-        img = cv2.imread(fr'.\images\{image_name}.png', 0)
+    # if image_name == 'Lena' or image_name == 'Shapes':
+    try:
+        img = cv2.imread(fr'..\images\{image_name}.png', 0)
         img = img.astype(np.float64)
         if show_flag:
             plt.imshow(img, cmap='gray')
@@ -31,8 +36,10 @@ def load_image(image_name, show_flag=True):
             plt.axis('off')
             plt.show()
         return img
-    else:
-        print('No image exists!')
+    except FileNotFoundError as e:
+        print(e.errno)
+    # else:
+    #     print('No image exists!')
 
 
 def add_noise(image, sigma, show_flag=True):
@@ -44,3 +51,37 @@ def add_noise(image, sigma, show_flag=True):
         plt.axis('off')
         plt.show()
     return noisy_img
+
+
+def create_cs_image(img, mask=None, compress_rate=None, show_flag=True):
+    f_full = np.fft.fftshift(np.fft.fft2(img, norm='ortho'))
+
+    if mask is None:
+        h, w = img.shape
+        mask = np.zeros((h, w))
+        num_samples = int(h * w * compress_rate)
+        idx = np.random.choice(h * w, num_samples, replace=False)
+        mask.flat[idx] = 1
+
+    f_compress = f_full * mask
+    u_0 = np.abs(np.fft.ifft2(np.fft.ifftshift(f_compress), norm='ortho'))
+
+    if show_flag:
+        fig, axes = plt.subplots(1, 4, figsize=(12, 3))
+
+        axes[0].imshow(img, cmap='gray')
+        axes[0].set_title("Original Image ($u$)")
+
+        axes[1].imshow(mask, cmap='gray')
+        axes[1].set_title(f"Sampling Mask ($R$)\n({int(compress_rate * 100)}% sampled)")
+
+        axes[2].imshow(np.log(np.abs(f_compress) + 1), cmap='magma')
+        axes[2].set_title("Sampled K-Space ($f$)\n(Frequency Domain)")
+
+        axes[3].imshow(u_0, cmap='gray')
+        axes[3].set_title("Zero-Filled Image ($u_0$)\n(Spatial Domain)")
+
+        for ax in axes: ax.axis('off')
+        plt.show()
+
+    return f_compress, u_0
