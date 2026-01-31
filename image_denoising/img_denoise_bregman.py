@@ -81,24 +81,26 @@ def img_denoise_main():
     img = load_image(image_name=image_name, show_flag=False)
     noisy_img = add_noise(image=img, sigma=sigma, show_flag=False)
 
-    denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_denoising(f=noisy_img,
-                                                                                          mu=mu,
-                                                                                          lamda=lamda,
-                                                                                          tolerance=tolerance,
-                                                                                          max_iters=max_iters,
-                                                                                          is_isotropic=False,
-                                                                                          solver_type=solver_type,
-                                                                                          gs_num_iters=gs_num_iters,
-                                                                                          show_flag=False)
-    denoise_img_isotropic, normalized_error_isotropic = apply_split_bregman_denoising(f=noisy_img,
-                                                                                      mu=mu,
-                                                                                      lamda=lamda,
-                                                                                      tolerance=tolerance,
-                                                                                      max_iters=max_iters,
-                                                                                      is_isotropic=True,
-                                                                                      solver_type=solver_type,
-                                                                                      gs_num_iters=gs_num_iters,
-                                                                                      show_flag=False)
+    denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_denoising(
+        f=noisy_img,
+        mu=mu,
+        lamda=lamda,
+        tolerance=tolerance,
+        max_iters=max_iters,
+        is_isotropic=False,
+        solver_type=solver_type,
+        gs_num_iters=gs_num_iters,
+        show_flag=False)
+    denoise_img_isotropic, normalized_error_isotropic = apply_split_bregman_denoising(
+        f=noisy_img,
+        mu=mu,
+        lamda=lamda,
+        tolerance=tolerance,
+        max_iters=max_iters,
+        is_isotropic=True,
+        solver_type=solver_type,
+        gs_num_iters=gs_num_iters,
+        show_flag=False)
 
     # plot results
     fig = plt.figure(figsize=(14, 18))
@@ -133,6 +135,37 @@ def img_denoise_main():
     ax5.legend()
     ax5.grid(True, which="both", ls="-", alpha=0.5)
 
+    plt.show()
+
+    # בחירת שורה לחיתוך (למשל אמצע התמונה)
+    row_idx = 20  # img.shape[0] // 4
+
+    fig_cs, axes_cs = plt.subplots(3, 2, figsize=(14, 15))
+    plt.subplots_adjust(hspace=0.4, wspace=0.3)
+
+    # נתונים להצגה (זוגות של תמונה וחתך רוחב)
+    plot_data = [
+        (noisy_img, "Noisy Image (sigma=15)", "red"),
+        (denoise_img_anisotropic, "Anisotropic Denoising", "blue"),
+        (denoise_img_isotropic, "Isotropic Denoising", "green")
+    ]
+
+    for i, (data_img, title, color) in enumerate(plot_data):
+        # הצגת התמונה עם קו המציין את מיקום החתך
+        axes_cs[i, 0].imshow(data_img, cmap='gray')
+        axes_cs[i, 0].axhline(y=row_idx, color='yellow', linestyle='--', alpha=0.6)
+        axes_cs[i, 0].set_title(title)
+        axes_cs[i, 0].axis('off')
+
+        # הצגת חתך הרוחב (Intensity Profile)
+        axes_cs[i, 1].plot(data_img[row_idx, :], color=color, linewidth=1.5)
+        axes_cs[i, 1].set_title(f"Cross Section (Row {row_idx})")
+        axes_cs[i, 1].set_xlabel("Pixel Index")
+        axes_cs[i, 1].set_ylabel("Intensity")
+        axes_cs[i, 1].set_ylim([-50, 300])  # התאמה לטווח הגרפים באיור 5.3
+        axes_cs[i, 1].grid(True, alpha=0.3)
+
+    plt.suptitle("Geometric Test Image: Image vs. Intensity Profile", fontsize=16)
     plt.show()
 
 
