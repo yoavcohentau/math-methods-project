@@ -21,6 +21,14 @@ def calc_img_divergence(img_x, img_y):
     return div_x + div_y
 
 
+def get_laplacian_kernel_freq_domain(h, w):
+    laplacian_kernel_space_domain = np.zeros((h, w))
+    laplacian_kernel_space_domain[:3, :3] = LAPLACIAN_KERNEL
+    laplacian_kernel_space_domain = np.roll(laplacian_kernel_space_domain, (-1, -1), axis=(0, 1))
+    laplacian_kernel_freq_domain = -np.fft.fft2(laplacian_kernel_space_domain)
+    return laplacian_kernel_freq_domain
+
+
 def shrink(x, gamma):
     return np.sign(x) * np.maximum(np.abs(x) - gamma, 0)
 
@@ -85,3 +93,39 @@ def create_cs_image(img, mask=None, compress_rate=None, show_flag=True):
         plt.show()
 
     return f_compress, u_0
+
+
+def apply_forward_haar_transform(img):
+    h, w = img.shape
+    h_half = h // 2
+    w_half = w // 2
+    harr_coeffs = np.zeros_like(img)
+
+    a = img[0:2 * h_half:2, 0:2 * w_half:2]
+    b = img[1:2 * h_half:2, 0:2 * w_half:2]
+    c = img[0:2 * h_half:2, 1:2 * w_half:2]
+    d = img[1:2 * h_half:2, 1:2 * w_half:2]
+    harr_coeffs[:h_half, :w_half] = (a + b + c + d) / 2
+    harr_coeffs[h_half:2 * h_half, :w_half] = (a - b + c - d) / 2
+    harr_coeffs[:h_half, w_half:2 * w_half] = (a + b - c - d) / 2
+    harr_coeffs[h_half:2 * h_half, w_half:2 * w_half] = (a - b - c + d) / 2
+
+    return harr_coeffs
+
+
+def apply_inverse_haar_transform(harr_coeffs):
+    h, w = harr_coeffs.shape
+    h_half = h // 2
+    w_half = w // 2
+    img = np.zeros_like(harr_coeffs)
+
+    LL = harr_coeffs[:h_half, :w_half]
+    LH = harr_coeffs[h_half:2 * h_half, :w_half]
+    HL= harr_coeffs[:h_half, w_half:2 * w_half]
+    HH = harr_coeffs[h_half:2 * h_half, w_half:2 * w_half]
+    img[0:2 * h_half:2, 0:2 * w_half:2] = (LL + LH + HL + HH) / 2
+    img[1:2 * h_half:2, 0:2 * w_half:2] = (LL - LH + HL - HH) / 2
+    img[0:2 * h_half:2, 1:2 * w_half:2] = (LL + LH - HL - HH) / 2
+    img[1:2 * h_half:2, 1:2 * w_half:2] = (LL - LH - HL + HH) / 2
+
+    return img

@@ -1,128 +1,105 @@
-from utils.utils_image_funcs import load_image, create_cs_image
-
-import numpy as np
-
 import numpy as np
 from matplotlib import pyplot as plt
-from utils.utils_image_funcs import shrink, load_image, calc_img_grad
+from utils.utils_image_funcs import shrink, load_image, calc_img_grad, get_laplacian_kernel_freq_domain, \
+    calc_img_divergence, apply_forward_haar_transform, apply_inverse_haar_transform, create_cs_image
 
 EPSILON = 1e-12
 
 
-def solve_cs_split_bregman(f_measured, mask, mu, lamda, inner_iters, tolerance, max_outer_iters):
+def solve_cs_split_bregman(f_measured, mask, mu, lamda, gamma, inner_iters, tolerance, max_outer_iters):
     h, w = f_measured.shape
+    num_pixels = h * w
 
-    # Use orthogonal normalization ('ortho') to keep scales consistent between spatial and frequency domains
+    # initialization
     u = np.real(np.fft.ifft2(np.fft.ifftshift(f_measured), norm='ortho'))
-    dx = np.zeros_like(u);
-    dy = np.zeros_like(u)
-    bx = np.zeros_like(u);
-    by = np.zeros_like(u)
+    d_x = np.zeros_like(u)
+    d_y = np.zeros_like(u)
+    w_coeffs = np.zeros_like(u)
+    b_x = np.zeros_like(u)
+    b_y = np.zeros_like(u)
+    b_w = np.zeros_like(u)
+    f_k = np.copy(f_measured)
 
-    fk = np.copy(f_measured)
+    # calc K kernel
+    laplacian_kernel_freq = get_laplacian_kernel_freq_domain(h, w)
+    K = mu * mask + lamda * np.fft.fftshift(np.abs(laplacian_kernel_freq)) + gamma
+    K[K < 1e-8] = 1
 
-    freq_r = np.fft.fftfreq(h).reshape(-1, 1)
-    freq_c = np.fft.fftfreq(w).reshape(1, -1)
-    laplace_kernel = 4 - 2 * np.cos(2 * np.pi * freq_r) - 2 * np.cos(2 * np.pi * freq_c)
-
-    # Denominator K matches the circulant structure (Page 12, eq 364)
-    K = mu * mask + lamda * laplace_kernel
-    K[K == 0] = 1
-
-    normalized_error_vec = []
-    outer_k = 0
-
-    while (outer_k < max_outer_iters):
-        u_old_outer = np.copy(u)
-
+    err_vec = []
+    for k in range(max_outer_iters):
         for _ in range(inner_iters):
-            # Divergence in spatial domain
-            div_spatial = (np.roll(dx - bx, 1, axis=1) - (dx - bx)) + \
-                          (np.roll(dy - by, 1, axis=0) - (dy - by))
+            # rhs
+            div_db = calc_img_divergence(d_x - b_x, d_y - b_y)
+            w_part = apply_inverse_haar_transform(w_coeffs - b_w)
+            rhs = mu * f_k + np.fft.fftshift(np.fft.fft2(lamda*div_db + gamma*w_part, norm='ortho'))
 
-            # Important: Use norm='ortho' here too
-            rhs = mu * fk + lamda * np.fft.fftshift(np.fft.fft2(div_spatial, norm='ortho'))
-            u_freq = rhs / K
+            # solve u
+            u = np.real(np.fft.ifft2(np.fft.ifftshift(rhs / K), norm='ortho'))
 
-            u = np.real(np.fft.ifft2(np.fft.ifftshift(u_freq), norm='ortho'))
+            # update d
+            u_x, u_y = calc_img_grad(u)
+            s = np.sqrt(np.abs(u_x + b_x) ** 2 + np.abs(u_y + b_y) ** 2)
+            d_x = np.maximum(s - 1 / lamda, 0) * (u_x + b_x) / (s + EPSILON)
+            d_y = np.maximum(s - 1 / lamda, 0) * (u_y + b_y) / (s + EPSILON)
 
-            ux, uy = calc_img_grad(u)
+            # update w
+            wu = apply_forward_haar_transform(u)
+            w_coeffs = shrink(wu + b_w, 1 / gamma)
 
-            # Isotropic TV shrinkage (Page 10, eq 4.4)
-            s = np.sqrt(np.abs(ux + bx) ** 2 + np.abs(uy + by) ** 2)
-            dx = np.maximum(s - 1 / lamda, 0) * (ux + bx) / (s + EPSILON)
-            dy = np.maximum(s - 1 / lamda, 0) * (uy + by) / (s + EPSILON)
+            # update b
+            b_x += (u_x - d_x)
+            b_y += (u_y - d_y)
+            b_w += (wu - w_coeffs)
 
-            bx += (ux - dx)
-            by += (uy - dy)
-
-        # Update measurements with 'ortho' consistency
+        # update f_k for constrained algorithm
         u_f = np.fft.fftshift(np.fft.fft2(u, norm='ortho'))
-        fk += (f_measured - mask * u_f)
+        f_k += (f_measured - mask * u_f)
 
-        error = np.linalg.norm(u - u_old_outer) / (np.linalg.norm(u) + EPSILON)
-        normalized_error_vec.append(error)
-        outer_k += 1
-        if error < tolerance: break
+        # calc error for constrained algorithm
+        error = np.linalg.norm(mask * u_f - f_measured) / num_pixels
+        err_vec.append(error)
+        if error < tolerance:
+            break
 
-    return u, normalized_error_vec
+    return u, err_vec
 
 
 img = load_image('MRI', show_flag=False)
-compress_rate = 0.3
+img = img / (np.max(img) + EPSILON)
 
+compress_rate = 0.3
 h, w = img.shape
 mask = np.zeros((h, w))
-num_samples = int(h * w * compress_rate)
-idx = np.random.choice(h * w, num_samples, replace=False)
+idx = np.random.choice(h * w, int(h * w * compress_rate), replace=False)
 mask.flat[idx] = 1
+
+# keep the center of the k-space (low frequencies)
+center_size = 1
+mask[h//2-center_size:h//2+center_size, w//2-center_size:w//2+center_size] = 1
 
 f_compress, u_0 = create_cs_image(img=img, mask=mask, compress_rate=compress_rate)
 
-u, normalized_error_vec = solve_cs_split_bregman(f_measured=f_compress,
-                                                 mask=mask,
-                                                 mu=1.0,
-                                                 lamda=2.0,
-                                                 inner_iters=5,
-                                                 tolerance=1e-4,
-                                                 max_outer_iters=30)
+u_recovered, errors = solve_cs_split_bregman(
+    f_measured=f_compress,
+    mask=mask,
+    mu=2.0,
+    lamda=4.0,
+    gamma=4.0,
+    inner_iters=10,
+    tolerance=1e-5,
+    max_outer_iters=50
+)
 
-# --- Plotting Results ---
-
-# 1. Create a figure for visual comparison
+# Plotting Results
 fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-plt.subplots_adjust(hspace=0.3)
-
-# Row 1, Left: Original Ground Truth
 axes[0, 0].imshow(img, cmap='gray')
-axes[0, 0].set_title("Original Image (Ground Truth)")
-axes[0, 0].axis('off')
-
-# Row 1, Right: Initial Zero-filled Reconstruction
-# This is what the image looks like before Split Bregman processing
+axes[0, 0].set_title("Original Ground Truth")
 axes[0, 1].imshow(u_0, cmap='gray')
-axes[0, 1].set_title(f"Zero-Filled Reconstruction\n({int(compress_rate*100)}% Measurements)")
-axes[0, 1].axis('off')
-
-# Row 2, Left: Final Recovered Image
-# The output of the Split Bregman CS algorithm [cite: 380, 525]
-axes[1, 0].imshow(u, cmap='gray')
-axes[1, 0].set_title("Split Bregman CS Recovery\n(TV Regularized)")
-axes[1, 0].axis('off')
-
-# Row 2, Right: Convergence Graph
-# Monitoring the normalized error over outer iterations [cite: 414]
-axes[1, 1].semilogy(normalized_error_vec, color='green', marker='o', linewidth=2)
-axes[1, 1].set_title("Convergence Comparison (Outer Loop)")
+axes[0, 1].set_title("Zero-Filled Reconstruction")
+axes[1, 0].imshow(u_recovered, cmap='gray')
+axes[1, 0].set_title("Split Bregman CS (Precise Laplace)")
+axes[1, 1].semilogy(errors, color='green', marker='o')
+axes[1, 1].set_title("Convergence (Fidelity Residual)")
 axes[1, 1].set_xlabel("Outer Iteration (k)")
-axes[1, 1].set_ylabel("Normalized Error (log scale)")
-axes[1, 1].grid(True, which="both", ls="-", alpha=0.5)
-
-plt.show()
-
-# 2. Display the Sampling Mask (R) separately to see the sparsity pattern [cite: 326]
-plt.figure(figsize=(6, 6))
-plt.imshow(mask, cmap='gray')
-plt.title(f"Random Sampling Mask (Rate: {compress_rate})")
-plt.axis('off')
+axes[1, 1].set_ylabel("Error (log scale)")
 plt.show()

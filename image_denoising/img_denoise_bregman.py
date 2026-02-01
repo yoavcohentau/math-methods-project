@@ -35,7 +35,6 @@ def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotrop
 
     normalized_error = np.inf
     normalized_error_vec = []
-
     while normalized_error > tolerance:
         u_new = solve_u_using_gs(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters)
 
@@ -102,7 +101,7 @@ def img_denoise_main():
         gs_num_iters=gs_num_iters,
         show_flag=False)
 
-    # plot results
+    # plot results - denoise
     fig = plt.figure(figsize=(14, 18))
     plt.subplots_adjust(hspace=0.4)
 
@@ -135,15 +134,14 @@ def img_denoise_main():
     ax5.legend()
     ax5.grid(True, which="both", ls="-", alpha=0.5)
 
-    plt.show()
+    # plt.show()
 
-    # בחירת שורה לחיתוך (למשל אמצע התמונה)
+    # plot results - anisotropic vs. isotropic
     row_idx = 20  # img.shape[0] // 4
 
     fig_cs, axes_cs = plt.subplots(3, 2, figsize=(14, 15))
     plt.subplots_adjust(hspace=0.4, wspace=0.3)
 
-    # נתונים להצגה (זוגות של תמונה וחתך רוחב)
     plot_data = [
         (noisy_img, "Noisy Image (sigma=15)", "red"),
         (denoise_img_anisotropic, "Anisotropic Denoising", "blue"),
@@ -151,18 +149,16 @@ def img_denoise_main():
     ]
 
     for i, (data_img, title, color) in enumerate(plot_data):
-        # הצגת התמונה עם קו המציין את מיקום החתך
         axes_cs[i, 0].imshow(data_img, cmap='gray')
         axes_cs[i, 0].axhline(y=row_idx, color='yellow', linestyle='--', alpha=0.6)
         axes_cs[i, 0].set_title(title)
         axes_cs[i, 0].axis('off')
 
-        # הצגת חתך הרוחב (Intensity Profile)
         axes_cs[i, 1].plot(data_img[row_idx, :], color=color, linewidth=1.5)
         axes_cs[i, 1].set_title(f"Cross Section (Row {row_idx})")
         axes_cs[i, 1].set_xlabel("Pixel Index")
         axes_cs[i, 1].set_ylabel("Intensity")
-        axes_cs[i, 1].set_ylim([-50, 300])  # התאמה לטווח הגרפים באיור 5.3
+        axes_cs[i, 1].set_ylim([-50, 300])
         axes_cs[i, 1].grid(True, alpha=0.3)
 
     plt.suptitle("Geometric Test Image: Image vs. Intensity Profile", fontsize=16)
