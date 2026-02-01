@@ -64,42 +64,47 @@ def solve_cs_split_bregman(f_measured, mask, mu, lamda, gamma, inner_iters, tole
     return u, err_vec
 
 
-img = load_image('MRI', show_flag=False)
-img = img / (np.max(img) + EPSILON)
+def img_cs_main():
+    img = load_image('MRI', show_flag=False)
+    img = img / (np.max(img) + EPSILON)
 
-compress_rate = 0.3
-h, w = img.shape
-mask = np.zeros((h, w))
-idx = np.random.choice(h * w, int(h * w * compress_rate), replace=False)
-mask.flat[idx] = 1
+    compress_rate = 0.3
+    h, w = img.shape
+    mask = np.zeros((h, w))
+    idx = np.random.choice(h * w, int(h * w * compress_rate), replace=False)
+    mask.flat[idx] = 1
 
-# keep the center of the k-space (low frequencies)
-center_size = 1
-mask[h//2-center_size:h//2+center_size, w//2-center_size:w//2+center_size] = 1
+    # keep the center of the k-space (low frequencies)
+    center_size = 1
+    mask[h//2-center_size:h//2+center_size, w//2-center_size:w//2+center_size] = 1
 
-f_compress, u_0 = create_cs_image(img=img, mask=mask, compress_rate=compress_rate)
+    f_compress, u_0 = create_cs_image(img=img, mask=mask, compress_rate=compress_rate)
 
-u_recovered, errors = solve_cs_split_bregman(
-    f_measured=f_compress,
-    mask=mask,
-    mu=2.0,
-    lamda=4.0,
-    gamma=4.0,
-    inner_iters=10,
-    tolerance=1e-5,
-    max_outer_iters=50
-)
+    u_recovered, errors = solve_cs_split_bregman(
+        f_measured=f_compress,
+        mask=mask,
+        mu=2.0,
+        lamda=4.0,
+        gamma=4.0,
+        inner_iters=10,
+        tolerance=1e-5,
+        max_outer_iters=50
+    )
 
-# Plotting Results
-fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-axes[0, 0].imshow(img, cmap='gray')
-axes[0, 0].set_title("Original Ground Truth")
-axes[0, 1].imshow(u_0, cmap='gray')
-axes[0, 1].set_title("Zero-Filled Reconstruction")
-axes[1, 0].imshow(u_recovered, cmap='gray')
-axes[1, 0].set_title("Split Bregman CS (Precise Laplace)")
-axes[1, 1].semilogy(errors, color='green', marker='o')
-axes[1, 1].set_title("Convergence (Fidelity Residual)")
-axes[1, 1].set_xlabel("Outer Iteration (k)")
-axes[1, 1].set_ylabel("Error (log scale)")
-plt.show()
+    # Plotting Results
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    axes[0, 0].imshow(img, cmap='gray')
+    axes[0, 0].set_title("Original Ground Truth")
+    axes[0, 1].imshow(u_0, cmap='gray')
+    axes[0, 1].set_title("Zero-Filled Reconstruction")
+    axes[1, 0].imshow(u_recovered, cmap='gray')
+    axes[1, 0].set_title("Split Bregman CS (Precise Laplace)")
+    axes[1, 1].semilogy(errors, color='green', marker='o')
+    axes[1, 1].set_title("Convergence (Fidelity Residual)")
+    axes[1, 1].set_xlabel("Outer Iteration (k)")
+    axes[1, 1].set_ylabel("Error (log scale)")
+    plt.show()
+
+
+if __name__ == "__main__":
+    img_cs_main()
