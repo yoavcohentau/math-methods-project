@@ -39,11 +39,9 @@ def apply_split_bregman_median_denoising(f, mu, lamda, tolerance, max_iters, is_
 
     normalized_error_vec = []
     for k in range(max_iters):
-        u_old = np.copy(u)
+        u_new = solve_u_using_gs_median(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters, e, b_e)
 
-        u = solve_u_using_gs_median(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters, e, b_e)
-
-        u_x, u_y = calc_img_grad(u)
+        u_x, u_y = calc_img_grad(u_new)
 
         if is_isotropic:
             s = np.sqrt((u_x + b_x) ** 2 + (u_y + b_y) ** 2)
@@ -59,8 +57,10 @@ def apply_split_bregman_median_denoising(f, mu, lamda, tolerance, max_iters, is_
         b_y += (u_y - d_y)
         b_e += (u - f - e)
 
-        normalized_error = np.linalg.norm(u - u_old) / (np.linalg.norm(u) + EPSILON)
+        normalized_error = np.linalg.norm(u_new - u) / (np.linalg.norm(u_new) + EPSILON)
         normalized_error_vec.append(normalized_error)
+
+        u = u_new
 
         if normalized_error < tolerance:
             break

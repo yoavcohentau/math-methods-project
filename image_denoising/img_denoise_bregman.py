@@ -15,8 +15,6 @@ def img_denoise_main():
 
     # algo params
     algorithm_type = "regular"  # "regular" ot "median" or "combine"
-    mu = 0.01 #0.05
-    lamda = 0.02 #0.1
     tolerance = 1e-3
     max_iters = 50
     solver_type = 'gauss-seidel'
@@ -27,6 +25,8 @@ def img_denoise_main():
     noisy_img = add_salt_and_pepper_noise(image=noisy_img, p=p_salt_n_paper)
 
     if algorithm_type == "regular":
+        mu = 0.01  # 0.05
+        lamda = 0.02  # 0.1
         denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_denoising(
             f=noisy_img,
             mu=mu,
@@ -49,6 +49,8 @@ def img_denoise_main():
             show_flag=False)
 
     elif algorithm_type == "median":
+        mu = 0.005
+        lamda = 0.01
         denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_median_denoising(
             f=noisy_img,
             mu=mu,
@@ -71,8 +73,9 @@ def img_denoise_main():
             show_flag=False)
 
     elif algorithm_type == "combine":
-        mu1 = mu
-        mu2 = mu / 10
+        mu1 = 0.0005
+        mu2 = mu1
+        lamda = 0.01
         denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_combine_denoising(
             f=noisy_img,
             mu1=mu1,
