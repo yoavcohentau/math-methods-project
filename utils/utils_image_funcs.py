@@ -50,7 +50,7 @@ def load_image(image_name, show_flag=True):
     #     print('No image exists!')
 
 
-def add_noise(image, sigma, show_flag=True):
+def add_white_noise(image, sigma, show_flag=True):
     noise = sigma * np.random.randn(*image.shape)
     noisy_img = image + noise
     if show_flag:
@@ -58,6 +58,14 @@ def add_noise(image, sigma, show_flag=True):
         plt.title(f"Noisy Image")
         plt.axis('off')
         plt.show()
+    return noisy_img
+
+
+def add_salt_and_pepper_noise(image, p):
+    noisy_img = np.copy(image)
+    random_matrix = np.random.random(image.shape)
+    noisy_img[random_matrix < (p / 2)] = 0
+    noisy_img[(random_matrix >= (p / 2)) & (random_matrix < p)] = 255
     return noisy_img
 
 

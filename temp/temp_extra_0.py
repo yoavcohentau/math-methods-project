@@ -1,18 +1,19 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from temp.temp_extra_0 import apply_split_bregman_median_denoising
-from temp.temp_extra_1 import apply_split_bregman_combine_denoising
-from utils.utils_image_funcs import shrink, load_image, add_white_noise, calc_img_grad, calc_img_divergence, \
-    add_salt_and_pepper_noise
+from utils.utils_image_funcs import shrink, load_image, calc_img_grad, calc_img_divergence, add_salt_and_pepper_noise
 
 EPSILON = 1e-12
 
 
-def solve_u_using_gs(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters):
+def solve_u_using_gs_median(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters, e=0, b_e=0):
+    # Updated for L1-Fidelity (Median-like behavior)
+    # The L2 term (u-f)^2 is replaced by splitting e = u - f
     const = 1 / (mu + 4 * lamda)
     diver = calc_img_divergence(d_x - b_x, d_y - b_y)
-    rhs = mu * f + lamda * diver
+
+    # The RHS now pulls u towards (f + e - b_e) which is the robust estimate
+    rhs = mu * (f + e - b_e) + lamda * diver
 
     for _ in range(gs_num_iters):
         u_down = np.roll(u, -1, axis=0)
@@ -20,6 +21,9 @@ def solve_u_using_gs(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters):
         u_right = np.roll(u, -1, axis=1)
         u_left = np.roll(u, 1, axis=1)
         u_sum = u_down + u_up + u_right + u_left
+        # u_sum = np.roll(u, -1, axis=0) + np.roll(u, 1, axis=0) + \
+        #         np.roll(u, -1, axis=1) + np.roll(u, 1, axis=1)
+        # u = const * (lamda * u_sum + rhs)
 
         G = const * (lamda * u_sum + rhs)
         u = G
@@ -27,7 +31,7 @@ def solve_u_using_gs(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters):
     return u
 
 
-def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotropic, solver_type, gs_num_iters,
+def apply_split_bregman_median_denoising(f, mu, lamda, tolerance, max_iters, is_isotropic, solver_type, gs_num_iters,
                                   show_flag=True):
     # initialization
     u = np.copy(f)
@@ -36,13 +40,22 @@ def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotrop
     b_x = np.zeros_like(f)
     b_y = np.zeros_like(f)
 
+    # New variables for the L1 Data Fidelity (The "Median" Logic)
+    e = np.zeros_like(f)
+    b_e = np.zeros_like(f)
+
     normalized_error = np.inf
     normalized_error_vec = []
-    while normalized_error > tolerance:
-        u_new = solve_u_using_gs(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters)
 
-        u_x, u_y = calc_img_grad(u_new)
+    for k in range(max_iters):
+        u_old = np.copy(u)
 
+        # 1. Update u (Now includes the robust e-variable)
+        u = solve_u_using_gs_median(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters, e, b_e)
+
+        u_x, u_y = calc_img_grad(u)
+
+        # 2. Update d (TV Regularization)
         if is_isotropic:
             s = np.sqrt((u_x + b_x) ** 2 + (u_y + b_y) ** 2)
             d_x = np.maximum(s - 1 / lamda, 0) * (u_x + b_x) / (s + EPSILON)
@@ -51,12 +64,20 @@ def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotrop
             d_x = shrink(u_x + b_x, 1 / lamda)
             d_y = shrink(u_y + b_y, 1 / lamda)
 
+        # 3. Update e (The Median-equivalent Shrinkage)
+        # This step "filters" out the salt & pepper noise spikes
+        e = shrink(u - f + b_e, 1 / mu)
+
+        # 4. Update Bregman variables
         b_x += (u_x - d_x)
         b_y += (u_y - d_y)
-        normalized_error = np.linalg.norm(u_new - u) / (np.linalg.norm(u_new) + EPSILON)
+        b_e += (u - f - e)
+
+        normalized_error = np.linalg.norm(u - u_old) / (np.linalg.norm(u) + EPSILON)
         normalized_error_vec.append(normalized_error)
 
-        u = u_new
+        if normalized_error < tolerance:
+            break
 
     if show_flag:
         plt.imshow(u, cmap='gray')
@@ -68,12 +89,10 @@ def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotrop
 
 
 def img_denoise_main():
+
     image_name = 'Shapes'  # 'Shapes' or 'Lena'
 
     sigma = 20
-    p = 0.0
-
-    algorithm_type = "combine"  # "regular" ot "median" or "combine"
 
     mu = 0.01 #0.05
     lamda = 0.02 #0.1
@@ -84,76 +103,28 @@ def img_denoise_main():
     gs_num_iters = 10
 
     img = load_image(image_name=image_name, show_flag=False)
-    noisy_img = add_white_noise(image=img, sigma=sigma, show_flag=False)
-    noisy_img = add_salt_and_pepper_noise(image=noisy_img, p=p)
+    noisy_img = add_salt_and_pepper_noise(image=img, p=0.3)
 
-    if algorithm_type == "regular":
-        denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_denoising(
-            f=noisy_img,
-            mu=mu,
-            lamda=lamda,
-            tolerance=tolerance,
-            max_iters=max_iters,
-            is_isotropic=False,
-            solver_type=solver_type,
-            gs_num_iters=gs_num_iters,
-            show_flag=False)
-        denoise_img_isotropic, normalized_error_isotropic = apply_split_bregman_denoising(
-            f=noisy_img,
-            mu=mu,
-            lamda=lamda,
-            tolerance=tolerance,
-            max_iters=max_iters,
-            is_isotropic=True,
-            solver_type=solver_type,
-            gs_num_iters=gs_num_iters,
-            show_flag=False)
-    elif algorithm_type == "median":
-        denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_median_denoising(
-            f=noisy_img,
-            mu=mu,
-            lamda=lamda,
-            tolerance=tolerance,
-            max_iters=max_iters,
-            is_isotropic=False,
-            solver_type=solver_type,
-            gs_num_iters=gs_num_iters,
-            show_flag=False)
-        denoise_img_isotropic, normalized_error_isotropic = apply_split_bregman_median_denoising(
-            f=noisy_img,
-            mu=mu,
-            lamda=lamda,
-            tolerance=tolerance,
-            max_iters=max_iters,
-            is_isotropic=True,
-            solver_type=solver_type,
-            gs_num_iters=gs_num_iters,
-            show_flag=False)
-    elif algorithm_type == "combine":
-        mu1 = mu
-        mu2 = mu / 10
-        denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_combine_denoising(
-            f=noisy_img,
-            mu1=mu1,
-            mu2=mu2,
-            lamda=lamda,
-            tolerance=tolerance,
-            max_iters=max_iters,
-            is_isotropic=False,
-            solver_type=solver_type,
-            gs_num_iters=gs_num_iters,
-            show_flag=False)
-        denoise_img_isotropic, normalized_error_isotropic = apply_split_bregman_combine_denoising(
-            f=noisy_img,
-            mu1=mu1,
-            mu2=mu2,
-            lamda=lamda,
-            tolerance=tolerance,
-            max_iters=max_iters,
-            is_isotropic=True,
-            solver_type=solver_type,
-            gs_num_iters=gs_num_iters,
-            show_flag=False)
+    denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_median_denoising(
+        f=noisy_img,
+        mu=mu,
+        lamda=lamda,
+        tolerance=tolerance,
+        max_iters=max_iters,
+        is_isotropic=False,
+        solver_type=solver_type,
+        gs_num_iters=gs_num_iters,
+        show_flag=False)
+    denoise_img_isotropic, normalized_error_isotropic = apply_split_bregman_median_denoising(
+        f=noisy_img,
+        mu=mu,
+        lamda=lamda,
+        tolerance=tolerance,
+        max_iters=max_iters,
+        is_isotropic=True,
+        solver_type=solver_type,
+        gs_num_iters=gs_num_iters,
+        show_flag=False)
 
     # plot results - denoise
     fig = plt.figure(figsize=(14, 18))
@@ -166,7 +137,7 @@ def img_denoise_main():
 
     ax2 = fig.add_subplot(3, 2, 2)
     ax2.imshow(noisy_img, cmap='gray')
-    ax2.set_title(f"Noisy Image (sigma={sigma}, p={p})")
+    ax2.set_title(f"Noisy Image (sigma={sigma})")
     ax2.axis('off')
 
     ax3 = fig.add_subplot(3, 2, 3)
@@ -197,7 +168,7 @@ def img_denoise_main():
     plt.subplots_adjust(hspace=0.4, wspace=0.3)
 
     plot_data = [
-        (noisy_img, f"Noisy Image (sigma={sigma}, p={p})", "red"),
+        (noisy_img, "Noisy Image (sigma=15)", "red"),
         (denoise_img_anisotropic, "Anisotropic Denoising", "blue"),
         (denoise_img_isotropic, "Isotropic Denoising", "green")
     ]
