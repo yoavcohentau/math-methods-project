@@ -9,11 +9,12 @@ from utils.utils_image_funcs import load_image, add_white_noise, add_salt_and_pe
 def img_denoise_main():
     image_name = 'Shapes'  # 'Shapes' or 'Lena'
 
-    sigma = 20
-    p = 0.0
+    # noise params
+    sigma_white_noise = 20
+    p_salt_n_paper = 0.0
 
+    # algo params
     algorithm_type = "regular"  # "regular" ot "median" or "combine"
-
     mu = 0.01 #0.05
     lamda = 0.02 #0.1
     tolerance = 1e-3
@@ -22,8 +23,8 @@ def img_denoise_main():
     gs_num_iters = 10
 
     img = load_image(image_name=image_name, show_flag=False)
-    noisy_img = add_white_noise(image=img, sigma=sigma, show_flag=False)
-    noisy_img = add_salt_and_pepper_noise(image=noisy_img, p=p)
+    noisy_img = add_white_noise(image=img, sigma=sigma_white_noise, show_flag=False)
+    noisy_img = add_salt_and_pepper_noise(image=noisy_img, p=p_salt_n_paper)
 
     if algorithm_type == "regular":
         denoise_img_anisotropic, normalized_error_anisotropic = apply_split_bregman_denoising(
@@ -108,7 +109,7 @@ def img_denoise_main():
 
     ax2 = fig.add_subplot(3, 2, 2)
     ax2.imshow(noisy_img, cmap='gray')
-    ax2.set_title(f"Noisy Image (sigma={sigma}, p={p})")
+    ax2.set_title(f"Noisy Image (sigma={sigma_white_noise}, p={p_salt_n_paper})")
     ax2.axis('off')
 
     ax3 = fig.add_subplot(3, 2, 3)
@@ -139,7 +140,7 @@ def img_denoise_main():
     plt.subplots_adjust(hspace=0.4, wspace=0.3)
 
     plot_data = [
-        (noisy_img, f"Noisy Image (sigma={sigma}, p={p})", "red"),
+        (noisy_img, f"Noisy Image (sigma={sigma_white_noise}, p={p_salt_n_paper})", "red"),
         (denoise_img_anisotropic, "Anisotropic Denoising", "blue"),
         (denoise_img_isotropic, "Isotropic Denoising", "green")
     ]

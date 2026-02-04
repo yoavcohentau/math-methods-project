@@ -33,9 +33,8 @@ def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotrop
     b_x = np.zeros_like(f)
     b_y = np.zeros_like(f)
 
-    normalized_error = np.inf
     normalized_error_vec = []
-    while normalized_error > tolerance:
+    for k in range(max_iters):
         u_new = solve_u_using_gs(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters)
 
         u_x, u_y = calc_img_grad(u_new)
@@ -54,6 +53,9 @@ def apply_split_bregman_denoising(f, mu, lamda, tolerance, max_iters, is_isotrop
         normalized_error_vec.append(normalized_error)
 
         u = u_new
+
+        if normalized_error < tolerance:
+            break
 
     if show_flag:
         plt.imshow(u, cmap='gray')

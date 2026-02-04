@@ -37,17 +37,14 @@ def apply_split_bregman_median_denoising(f, mu, lamda, tolerance, max_iters, is_
     e = np.zeros_like(f)
     b_e = np.zeros_like(f)
 
-    normalized_error = np.inf
     normalized_error_vec = []
     for k in range(max_iters):
         u_old = np.copy(u)
 
-        # 1. Update u (Now includes the robust e-variable)
         u = solve_u_using_gs_median(u, f, d_x, d_y, b_x, b_y, mu, lamda, gs_num_iters, e, b_e)
 
         u_x, u_y = calc_img_grad(u)
 
-        # 2. Update d (TV Regularization)
         if is_isotropic:
             s = np.sqrt((u_x + b_x) ** 2 + (u_y + b_y) ** 2)
             d_x = np.maximum(s - 1 / lamda, 0) * (u_x + b_x) / (s + EPSILON)
@@ -56,11 +53,8 @@ def apply_split_bregman_median_denoising(f, mu, lamda, tolerance, max_iters, is_
             d_x = shrink(u_x + b_x, 1 / lamda)
             d_y = shrink(u_y + b_y, 1 / lamda)
 
-        # 3. Update e (The Median-equivalent Shrinkage)
-        # This step "filters" out the salt & pepper noise spikes
         e = shrink(u - f + b_e, 1 / mu)
 
-        # 4. Update Bregman variables
         b_x += (u_x - d_x)
         b_y += (u_y - d_y)
         b_e += (u - f - e)

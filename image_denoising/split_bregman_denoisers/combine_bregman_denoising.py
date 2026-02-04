@@ -20,26 +20,27 @@ def solve_u_using_gs_combine(u, f, d_x, d_y, b_x, b_y, mu1, mu2, lamda, gs_num_i
 
         G = const * (lamda * u_sum + rhs)
         u = G
+
     return u
 
 
 def apply_split_bregman_combine_denoising(f, mu1, mu2, lamda, tolerance, max_iters, is_isotropic, solver_type, gs_num_iters,
                                   show_flag=True):
-    # Initialization
+    # initialization
     u = np.copy(f)
-    d_x, d_y, b_x, b_y = [np.zeros_like(f) for _ in range(4)]
+    d_x = np.zeros_like(f)
+    d_y = np.zeros_like(f)
+    b_x = np.zeros_like(f)
+    b_y = np.zeros_like(f)
 
-    # Variables for the L1-part of the hybrid fidelity
+    # The new L1 constrain - the "median"
     e = np.zeros_like(f)
     b_e = np.zeros_like(f)
 
-    normalized_error = np.inf
     normalized_error_vec = []
-
     for k in range(max_iters):
         u_old = np.copy(u)
 
-        # 1. Update u using the hybrid LHS/RHS
         u = solve_u_using_gs_combine(u, f, d_x, d_y, b_x, b_y, mu1, mu2, lamda, gs_num_iters, e, b_e)
 
         u_x, u_y = calc_img_grad(u)
@@ -53,10 +54,8 @@ def apply_split_bregman_combine_denoising(f, mu1, mu2, lamda, tolerance, max_ite
             d_x = shrink(u_x + b_x, 1 / lamda)
             d_y = shrink(u_y + b_y, 1 / lamda)
 
-        # 3. Update e (The L1 fidelity 'Median' shrinkage)
         e = shrink(u - f + b_e, 1 / mu1)
 
-        # 4. Update Bregman variables (Adding the noise back)
         b_x += (u_x - d_x)
         b_y += (u_y - d_y)
         b_e += (u - f - e)
