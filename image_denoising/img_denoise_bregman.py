@@ -22,7 +22,7 @@ def img_denoise_main():
 
     img = load_image(image_name=image_name, show_flag=False)
     noisy_img = add_white_noise(image=img, sigma=sigma_white_noise, show_flag=False)
-    noisy_img = add_salt_and_pepper_noise(image=noisy_img, p=p_salt_n_paper)
+    noisy_img = add_salt_and_pepper_noise(image=noisy_img, p=p_salt_n_paper, show_flag=False)
 
     if algorithm_type == "regular":
         mu = 0.01  # 0.05

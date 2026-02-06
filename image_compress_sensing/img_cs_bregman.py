@@ -39,8 +39,8 @@ def solve_cs_split_bregman(f_measured, mask, mu, lamda, gamma, inner_iters, tole
             # update d
             u_x, u_y = calc_img_grad(u)
             s = np.sqrt(np.abs(u_x + b_x) ** 2 + np.abs(u_y + b_y) ** 2)
-            d_x = np.maximum(s - 1 / lamda, 0) * (u_x + b_x) / (s + EPSILON)
-            d_y = np.maximum(s - 1 / lamda, 0) * (u_y + b_y) / (s + EPSILON)
+            d_x = np.maximum(s - 1 / lamda, 0) * (u_x + b_x) / (s + EPSILON)  # general-shrink
+            d_y = np.maximum(s - 1 / lamda, 0) * (u_y + b_y) / (s + EPSILON)  # general-shrink
 
             # update w
             wu = apply_forward_haar_transform(u)
@@ -58,6 +58,7 @@ def solve_cs_split_bregman(f_measured, mask, mu, lamda, gamma, inner_iters, tole
         # calc error for constrained algorithm
         error = np.linalg.norm(mask * u_f - f_measured) / num_pixels
         err_vec.append(error)
+
         if error < tolerance:
             break
 

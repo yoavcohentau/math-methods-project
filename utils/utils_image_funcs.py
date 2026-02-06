@@ -61,11 +61,16 @@ def add_white_noise(image, sigma, show_flag=True):
     return noisy_img
 
 
-def add_salt_and_pepper_noise(image, p):
+def add_salt_and_pepper_noise(image, p, show_flag=True):
     noisy_img = np.copy(image)
     random_matrix = np.random.random(image.shape)
     noisy_img[random_matrix < (p / 2)] = 0
     noisy_img[(random_matrix >= (p / 2)) & (random_matrix < p)] = 255
+    if show_flag:
+        plt.imshow(noisy_img, cmap='gray')
+        plt.title(f"Noisy Image")
+        plt.axis('off')
+        plt.show()
     return noisy_img
 
 
@@ -97,7 +102,8 @@ def create_cs_image(img, mask=None, compress_rate=None, show_flag=True):
         axes[3].imshow(u_0, cmap='gray')
         axes[3].set_title("Zero-Filled Image ($u_0$)\n(Spatial Domain)")
 
-        for ax in axes: ax.axis('off')
+        for ax in axes:
+            ax.axis('off')
         plt.show()
 
     return f_compress, u_0
